@@ -38,7 +38,7 @@ def fitness(tsp, ind):
 def optimize(tsp):
   λ = 100 # population size
   μ = 500 # offspring size
-  iter =20
+  iter =50
 
   # Initialization
   population = initialize(tsp,λ)
