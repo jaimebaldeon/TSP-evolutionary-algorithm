@@ -4,6 +4,7 @@ import statistics
 import random
 import sys
 import matplotlib.pyplot as plt
+import time
 
 class TSP:
   def __init__(self, matrix):
@@ -19,7 +20,7 @@ class TSP:
 class Individual:
   def __init__(self, tsp):
     self.order = np.random.permutation(tsp.vertices)
-    self.α = 0.05
+    self.α = random.uniform(5e-4,1e-1)
 
 def fitness(tsp, ind):
   value = 0
@@ -35,9 +36,9 @@ def fitness(tsp, ind):
   return value
 
 def optimize(tsp):
-  λ = 1000 # population size
-  μ = 2000 # offspring size
-  iter =10
+  λ = 100 # population size
+  μ = 500 # offspring size
+  iter =20
 
   # Initialization
   population = initialize(tsp,λ)
@@ -80,7 +81,7 @@ def optimize(tsp):
 
   # Print Best final Candidate solution
   bestSol = fitnesses.index(min(fitnesses))
-  #print(population[bestSol].order)
+  print('Best solution mutation rate', population[bestSol].α)
   # check if it has inf
   '''for ind in population:
     print("Candidate solution:  ", ind.order)
@@ -170,16 +171,24 @@ def elimination(population, offspring, tsp):
   #print(ranked_individuals)
   return [ind for fit, ind in ranked_individuals]
 
-# Only needed to import the file into colab, needs only to be run once
-#from google.colab import files
-#uploaded = files.upload()
+
+ 
+
+# Initialize timer
+init_t = time.perf_counter()
+
 filename = sys.argv[1]
-print(f'Solving {filename} ')
+print(f'Solving {filename}... ')
 matrix = np.genfromtxt(filename,delimiter=',')
+# Create TSP problem class
+tsp = TSP(matrix) 
 
-tsp = TSP(matrix)
-
+# Execution of the EA 
 optimize(tsp)
+
+# Print processing time
+end_t = time.perf_counter()
+print(f"Total time:     {end_t - init_t:.4f} seconds")
 
 # 3000 + 3000 (50its)  >>  22670.967669271264
 # 3000 + 3000 (100its)  >>  12837.643185583667
