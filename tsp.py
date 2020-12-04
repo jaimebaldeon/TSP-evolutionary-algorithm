@@ -101,6 +101,7 @@ def initialize(tsp, λ):
   return population
 
 def mutate(individual):
+  # scramble mutation
   if np.random.rand() < individual.α:
     i = random.randrange(len(individual.order))
     j = random.randrange(len(individual.order))
