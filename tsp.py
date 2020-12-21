@@ -16,9 +16,13 @@ class TSP:
     inf = float('inf')
     if np.max(matrix) == inf:
       # infinite weights must be changed to finite values
-      self.distanceMatrix = np.where(matrix==inf,1e8, matrix)
-    else:
+      matrix = np.where(matrix==inf,1e6, matrix)
       self.distanceMatrix = matrix
+      #self.distanceMatrix = matrix/np.linalg.norm(matrix)
+    else:
+      #self.distanceMatrix = matrix/np.linalg.norm(matrix)
+      self.distanceMatrix = matrix
+      
 
 class Individual:
   def __init__(self, tsp):
@@ -38,12 +42,25 @@ def fitness(tsp, order):
   value += tsp.distanceMatrix[order[-1], order[0]]
   return value
 
+def real_fitness(tsp, order):
+  value = 0
+  ii = 0
+  for i in order:
+    # Sum up total distance for the individual's sequence of nodes 
+    while (ii < order.size - 1):
+      pairVertices = order[ii:ii+2]
+      value += tsp.realMatrix[pairVertices[0], pairVertices[1]]
+      ii += 1 
+  # add the distance between first and last node
+  value += tsp.realMatrix[order[-1], order[0]]
+  return value
+
 def optimize(tsp):
   init_t = time.perf_counter()
   λ = 20 # population size
-  μ = 180 # offspring size
-  iters =9000
-  migration = 50 # migration between islands
+  μ = 60 # offspring size
+  iters =500
+  migration = 40 # migration between islands
   localSearch = 2
 
 # INITIALIZATION
@@ -54,21 +71,17 @@ def optimize(tsp):
   populations = []
   populationMixed = []
   for isl in range(num_islands):     
-    populations.append(initializeKMeans(tsp, λ))    
+    populations.append(initialize(tsp, λ))    
 
   diversity = [0] * num_islands
   trapped = [0] * num_islands
   means = [0] * num_islands
   bests = [0] * num_islands
+  final = False
 
 # EVOLUTION
 
-  for iter in range(iters):  	
-    end_t = time.perf_counter()
-    if end_t - init_t > 60 * 5:
-      print('Time out')
-      print('Iteration: ',iter)
-      break 
+  for iter in range(iters):  	     
   
   # FOR EACH ISLAND
 
@@ -96,7 +109,11 @@ def optimize(tsp):
 
     	# LOCAL SEARCH OVER OFFSPRING
 
-    		#offspring[ind].order = local_search_fast(tsp, offspring[ind].order)  
+    		if island % 3 == 0 and np.random.rand() < 0.6:
+    			offspring[ind * 2].order = two_opt(tsp, offspring[ind * 2].order)  
+    			offspring[ind * 2 + 1].order = two_opt(tsp, offspring[ind * 2 + 1].order)  
+    		elif island % 3 == 1 and np.random.rand() < 0.6:
+    			offspring[ind].order = two_opt(tsp, offspring[ind].order)  
 
 
     # MUTATION
@@ -126,13 +143,18 @@ def optimize(tsp):
     # LOCAL SEARCH OVER BEST SOLUTIONS
 
     	fitnesses = [fitness(tsp, ind.order) for ind in population]
-    	if iter % localSearch == 0 and iter != 0 and trapped[island] < 5:
-    	    	    	    		bestInd = fitnesses.index(min(fitnesses))
-    	    	    	    		population[bestInd].order = local_search(tsp, population[bestInd].order)
+    	if iter % localSearch == 0 and iter != 0:
+    	    bestInd = fitnesses.index(min(fitnesses))
+    	    population[bestInd].order = two_opt(tsp, population[bestInd].order)
+    	    population[bestInd].order = local_search(tsp, population[bestInd].order)
+    	elif trapped[island] >= 5:
+    		for ind in population:
+    			if np.random.rand() < 0.7:
+    				ind.order = two_opt(tsp, ind.order, randomize=True)
     	
     # CHECK IF TRAPPED IN LOCAL SPACE  
 
-    	if trapped[island] < 5: fitnesses = [fitness(tsp, ind.order) for ind in population]
+    	fitnesses = [fitness(tsp, ind.order) for ind in population]
     	if (bests[island] == min(fitnesses)):
     		trapped[island] += 1
     	else:        
@@ -145,7 +167,7 @@ def optimize(tsp):
 
     # MIX ISLANDS IN THE LAST ITERATION 
 
-    	if iter == iters -1:
+    	if iter == iters -1 or final:
     		populationMixed.extend(population)
 
     # HISTORICAL DATA GATHERING    	
@@ -154,9 +176,15 @@ def optimize(tsp):
     	diversity[island] = statistics.mean(fitnesses) - bests[island]
     	if iter % 1 == 0:
     		print(f'---------------------------------  ITERATION {iter}, ISLAND {island} ---------------------------------')  
-    		print("Mean fitness:  ", f'{statistics.mean(fitnesses):.5f}', '\t', "Best fitness:  ", f'{bests[island]:.5f}',
-         	"\t", 'Diversity:', f'{diversity[island]:.5f}')
+    		print("Mean fitness:  ", f'{statistics.mean(fitnesses):.5f}', '\t', "Best fitness:  ", f'{bests[island]:.5f}',"\t", 'Diversity:', f'{diversity[island]:.5f}')
     	island += 1
+    end_t = time.perf_counter()
+    if end_t - init_t > 60 * 5:
+        print('Time out')
+        print('Iteration: ',iter)
+        if final:
+        	break
+        final = True
 
 # BEST SOLUTION 
 
@@ -183,11 +211,12 @@ def initialize(tsp, λ):
 
 def initializeKMeans(tsp, λ): 
   population = []  
-  for ii in range(3):
-    population.append(create_seed_ind(tsp))
-    
+  for ii in range(λ):
+    seed = create_seed_ind(tsp)
+    seed.order = two_opt(tsp, seed.order) 
+    population.append(seed) 
   # Random initialize the other half
-  for ii in range(3,λ):
+  for ii in range(λ,λ):
     ind = Individual(tsp)
     population.insert(ii,ind)
   return population
@@ -283,10 +312,8 @@ def create_seed_ind(tsp):
   return firstInd
 
 def local_search(tsp, order):
-  fitnesses = []
-  neighbours = []
-  fitnesses.append(fitness(tsp, order))
-  neighbours.append(order)
+  selected = order
+  bestFit = fitness(tsp, order)
   n = 1
   while(n <= len(order) - 3):
     for i in range(len(order)):
@@ -300,18 +327,36 @@ def local_search(tsp, order):
       inv = cycleSeq[i+n+1:idx+1][::-1]
       rem = cycleSeq[i:i+n+1]
       newOrder = np.append(rem, inv)
-      neighbours.append(newOrder)
-      # calculate fitness of order and append to list
-      fitnesses.append(fitness(tsp, newOrder))
-    n+=1
-  selected = fitnesses.index(min(fitnesses))
-  return  neighbours[selected]
+      # take neighbour with lowest fitness 
+      if fitness(tsp, newOrder) < bestFit:
+        bestFit = fitness(tsp, newOrder)
+        selected = newOrder
+    n+=1  
+  return  selected
+
+def two_opt(tsp, order, randomize=False):
+    min_change = 0
+    num_cities = len(order)
+    if randomize:
+    	min_i = random.sample(list(np.arange(num_cities - 2)), 1)[0] 
+    	min_j = random.sample(list(np.arange(min_i + 2, num_cities)), 1)[0]
+    	order[min_i+1:min_j+1] = order[min_i+1:min_j+1][::-1]
+    	return order
+    # Find the best move
+    for i in range(num_cities - 2):
+        for j in range(i + 2, num_cities - 1):
+            change = tsp.distanceMatrix[order[i], order[j]] + tsp.distanceMatrix[order[i+1], order[j+1]] - tsp.distanceMatrix[order[i], order[i+1]] - tsp.distanceMatrix[order[j], order[j+1]]
+            if change < min_change:
+                min_change = change
+                min_i, min_j = i, j                  
+    # Update tour with best move
+    if min_change < 0:
+        order[min_i+1:min_j+1] = order[min_i+1:min_j+1][::-1]
+    return order 
 
 def local_search_fast(tsp, order):
-  fitnesses = []
-  neighbours = []
-  fitnesses.append(fitness(tsp, order))
-  neighbours.append(order)
+  selected = order
+  bestFit = fitness(tsp, order)
   maxN = len(order) - 3
   n = 1
   stopMiddle = False
@@ -338,12 +383,12 @@ def local_search_fast(tsp, order):
       inv = cycleSeq[i+n+1:idx+1][::-1]
       rem = cycleSeq[i:i+n+1]
       newOrder = np.append(rem, inv)
-      neighbours.append(newOrder)
-      # calculate fitness of order and append to list
-      fitnesses.append(fitness(tsp, newOrder))
+      # take neighbour with lowest fitness 
+      if fitness(tsp, newOrder) < bestFit:
+        bestFit = fitness(tsp, newOrder)
+        selected = newOrder
     n+=1
-  selected = fitnesses.index(min(fitnesses))
-  return  neighbours[selected]
+  return  selected
 
 def inverseMutate(individual):
   # inverse mutation
