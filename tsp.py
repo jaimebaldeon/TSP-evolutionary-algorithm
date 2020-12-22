@@ -57,21 +57,45 @@ def real_fitness(tsp, order):
 
 def optimize(tsp):
   init_t = time.perf_counter()
-  λ = 20 # population size
-  μ = 60 # offspring size
-  iters =500
-  migration = 40 # migration between islands
-  localSearch = 2
+  λ = 10 # population size
+  μ = 30 # offspring size
+  localSearch = 1
+  probLS = 0 # 0.6 in 100 and 194
+  
+  tourLength = len(tsp.vertices) 
+  if tourLength <= 65:
+  	iters = 280
+  	num_islands = 4
+  	migration = 50 # migration between islands  	
+  	numNeighbours = 2 # number of steps/neighbours?????????????????????????????????	in local search 
+  	λopt = 0
+  elif 65 < tourLength <= 145:
+  	iters = 350  	
+  	num_islands = 4
+  	migration = 50 
+  	numNeighbours = 5 # number of steps/neighbours?????????????????????????????????	in local search 
+  	λopt = 1
+  elif 145 < tourLength <= 300:
+  	iters = 280  	
+  	num_islands = 4
+  	migration = 50 
+  	numNeighbours = 3 # number of steps/neighbours?????????????????????????????????	in local search 
+  	λopt = 0
+  else:
+  	iters = 50  	
+  	num_islands = 1
+  	migration = 100 # not used, therefore set to high vaue
+  	numNeighbours = 5 # number of steps/neighbours?????????????????????????????????	in local search 
+  	λopt = 1
 
 # INITIALIZATION
 
   # SPLIT INTO ISLANDS
 
-  num_islands = 2
   populations = []
   populationMixed = []
   for isl in range(num_islands):     
-    populations.append(initialize(tsp, λ))    
+    populations.append(initializeKMeans(tsp, λ, λopt))    
 
   diversity = [0] * num_islands
   trapped = [0] * num_islands
@@ -109,11 +133,11 @@ def optimize(tsp):
 
     	# LOCAL SEARCH OVER OFFSPRING
 
-    		if island % 3 == 0 and np.random.rand() < 0.6:
+    		if island % 3 == 0 and np.random.rand() < probLS:
     			offspring[ind * 2].order = two_opt(tsp, offspring[ind * 2].order)  
     			offspring[ind * 2 + 1].order = two_opt(tsp, offspring[ind * 2 + 1].order)  
-    		elif island % 3 == 1 and np.random.rand() < 0.6:
-    			offspring[ind].order = two_opt(tsp, offspring[ind].order)  
+    		elif island % 3 == 1 and np.random.rand() < probLS:
+    			offspring[ind].order = two_opt(tsp, offspring[ind].order)
 
 
     # MUTATION
@@ -141,16 +165,18 @@ def optimize(tsp):
     	population = elimination(population, offspring, tsp)    	    
 
     # LOCAL SEARCH OVER BEST SOLUTIONS
-
+    	
     	fitnesses = [fitness(tsp, ind.order) for ind in population]
-    	if iter % localSearch == 0 and iter != 0:
+    	if iter % localSearch == 0 and iter != 0 and trapped[island] < 5:
     	    bestInd = fitnesses.index(min(fitnesses))
-    	    population[bestInd].order = two_opt(tsp, population[bestInd].order)
-    	    population[bestInd].order = local_search(tsp, population[bestInd].order)
+    	    for ii in range(numNeighbours):
+    	    	# only for 929
+    	    	population[bestInd].order = two_opt(tsp, population[bestInd].order)    	        	   
+    	    #population[bestInd].order = local_search(tsp, population[bestInd].order)
     	elif trapped[island] >= 5:
     		for ind in population:
-    			if np.random.rand() < 0.7:
-    				ind.order = two_opt(tsp, ind.order, randomize=True)
+    			if np.random.rand() < 0.75:
+    				ind.order = two_opt(tsp, ind.order, randomize=True)    	
     	
     # CHECK IF TRAPPED IN LOCAL SPACE  
 
@@ -174,7 +200,7 @@ def optimize(tsp):
     			
     	means[island] = statistics.mean(fitnesses)    	
     	diversity[island] = statistics.mean(fitnesses) - bests[island]
-    	if iter % 1 == 0:
+    	if iter % 5 == 0:
     		print(f'---------------------------------  ITERATION {iter}, ISLAND {island} ---------------------------------')  
     		print("Mean fitness:  ", f'{statistics.mean(fitnesses):.5f}', '\t', "Best fitness:  ", f'{bests[island]:.5f}',"\t", 'Diversity:', f'{diversity[island]:.5f}')
     	island += 1
@@ -209,14 +235,14 @@ def initialize(tsp, λ):
     population.append(Individual(tsp))
   return population
 
-def initializeKMeans(tsp, λ): 
+def initializeKMeans(tsp, λ, λopt=1): 
   population = []  
-  for ii in range(λ):
+  for ii in range(λopt):
     seed = create_seed_ind(tsp)
     seed.order = two_opt(tsp, seed.order) 
     population.append(seed) 
   # Random initialize the other half
-  for ii in range(λ,λ):
+  for ii in range(λopt,λ):
     ind = Individual(tsp)
     population.insert(ii,ind)
   return population
